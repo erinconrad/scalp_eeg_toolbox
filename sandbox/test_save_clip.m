@@ -20,12 +20,16 @@ data = download_ieeg_data(file_name,login_name,pwfile,[start_time end_time],1); 
 values = data.values;
 chLabels = data.chLabels(:,1);
 fs = data.fs;
+data.start_time = start_time;
+data.end_time = end_time;
+data.file_name = file_name;
 
-%[bipolar_values,bipolar_labels] = scalp_bipolar(chLabels,values);
-%plot_scalp_eeg(bipolar_values,fs,bipolar_labels);
+[bipolar_values,bipolar_labels] = scalp_bipolar(chLabels,values);
+data.bipolar_values = bipolar_values;
+data.bipolar_labels = bipolar_labels;
+plot_scalp_eeg(bipolar_values,fs,bipolar_labels);
 
 %% Save the clip
-fname = sprintf('%s_%1.2f-%1.2fs'
-save([locations.main_folder,'data/eeg_clips'
+save([locations.main_folder,'data/eeg_clips/',file_name],'data');
 
 end

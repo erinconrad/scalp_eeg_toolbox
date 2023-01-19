@@ -1,6 +1,6 @@
 function plot_scalp_eeg(values,fs,labels)
 
-added_offset = 100;
+added_offset = 80;
 figure
 
 set(gcf,'position',[10 10 1400 1000])
@@ -20,7 +20,7 @@ for ich = 1:nchs
     ch_offsets(ich) = offset;
     ch_bl(ich) = -offset + nanmedian(values(:,ich));
     offset = offset+added_offset;
-    text(dur+0.05,ch_bl(ich),sprintf('%s',labels{ich}),'fontsize',20)
+    text(dur+0.05,ch_bl(ich),sprintf('%s',labels{ich}),'fontsize',15)
     
     
 end
@@ -29,7 +29,7 @@ yticklabels([])
 xticks(1:floor(dur))
 ylim([-offset-added_offset added_offset])
 xlabel('Time (seconds)')
-set(gca,'fontsize',20)
+set(gca,'fontsize',15)
 
 %% Add second markers
 for i = 1:dur
