@@ -31,6 +31,10 @@ nsamples = size(values,1);
 nbi_channels = size(montage,1);
 bipolar_values = nan(nsamples,nbi_channels);
 
+% convert EKGL and R to 1 and 2
+chLabels(strcmp(chLabels,'ECGL')) = {'EKG1'};
+chLabels(strcmp(chLabels,'ECGR')) = {'EKG2'};
+
 for ib = 1:nbi_channels
     
     curr_mon = montage(ib,:);

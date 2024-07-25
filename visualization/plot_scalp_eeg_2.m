@@ -1,4 +1,4 @@
-function plot_scalp_eeg(values,fs,labels)
+function plot_scalp_eeg_2(values,fs)
 
 added_offset = 50;
 figure
@@ -7,7 +7,7 @@ set(gcf,'position',[10 10 1400 1000])
 tiledlayout(1,1,'padding','compact')
 nexttile
 dur = size(values,1)/fs;
-nchs = length(labels);
+nchs = size(values,2);
 
 offset = 0;
 
@@ -20,7 +20,7 @@ for ich = 1:nchs
     ch_offsets(ich) = offset;
     ch_bl(ich) = -offset + nanmedian(values(:,ich));
     offset = offset+added_offset;
-    text(dur+0.05,ch_bl(ich),sprintf('%s',labels{ich}),'fontsize',15)
+    %text(dur+0.05,ch_bl(ich),sprintf('%s',labels{ich}),'fontsize',15)
     
     if ich < nchs
         if ~isnan(min(values(:,ich)) - max(values(:,ich+1)))
