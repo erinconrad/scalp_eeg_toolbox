@@ -1,3 +1,16 @@
+%{
+This code takes in an edf file with the path "filepath" and outputs the
+time series data, channel labels, and sampling rate.
+
+Inputs:
+- filepath: the path to the edf file
+
+Outputs:
+out: an nsamples x nchannels matrix containing time series data
+chLabels: a nchannels x 1 cell containing channel labels
+fs: the sampling frequency
+%}
+
 function [out,chLabels,fs] = read_in_edf(filepath)
 
 data = edfread(filepath);
