@@ -48,7 +48,14 @@ for ib = 1:nbi_channels
     lab1 = strcmp(chLabels,curr_mon{1});
     lab2 = strcmp(chLabels,curr_mon{2});
 
-    assert(sum(lab1)==1 && sum(lab2)==1)
+    
+    if ~(sum(lab1)==1 && sum(lab2)==1)
+        if contains(curr_mon{1},'EKG')
+            continue
+        else
+            error('missing expected channel')
+        end
+    end
     
     % get difference in eeg signal
     val1 = values(:,lab1);

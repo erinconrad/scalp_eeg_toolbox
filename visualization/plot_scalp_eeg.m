@@ -1,6 +1,6 @@
 function plot_scalp_eeg(values,fs,labels)
 
-added_offset = 50;
+added_offset = 20;
 figure
 
 set(gcf,'position',[10 10 1400 1000])
