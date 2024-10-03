@@ -4,9 +4,9 @@ file_name = 'test_scalp_withcm';
 start_time = 71485.33;
 %}
 
-file_name = 'HUP215_phaseII_D03';%'EMU0779_Day01_1';
-start_time = 418705.80;%9567.2;
-end_time = 418705.80+15;%9567.2+30;
+file_name = 'EMU1614_Day05_1';%'EMU0779_Day01_1';
+start_time = 62499.75;%9567.2;
+end_time = 62499.75+1;%9567.2+30;
 
 %% File locs and set path
 locations = scalp_toolbox_locs;

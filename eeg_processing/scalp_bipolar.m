@@ -23,7 +23,7 @@ montage = {'Fp1','F7';...
     'Fz','Cz';...
     '','';...
     '','';...
-    'EKG1','EKG2'};
+    'EKG1',''};
 
 bipolar_labels = cellfun(@(x,y) sprintf('%s-%s',x,y),montage(:,1),montage(:,2),'uniformoutput',false);
 
@@ -51,10 +51,17 @@ for ib = 1:nbi_channels
     
     if ~(sum(lab1)==1 && sum(lab2)==1)
         if contains(curr_mon{1},'EKG')
-            continue
+            if sum(lab1) == 0
+                continue
+            end
         else
             error('missing expected channel')
         end
+    end
+
+    if sum(lab2) == 0 && strcmp(chLabels(lab1),'EKG1')
+        bipolar_values(:,ib) = values(:,lab1);
+        continue
     end
     
     % get difference in eeg signal
