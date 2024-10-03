@@ -53,7 +53,8 @@ values = values - nanmean(values,1);
 [bipolar_values,bipolar_labels] = scalp_bipolar(chLabels,values);
 data.bipolar_values = bipolar_values;
 data.bipolar_labels = bipolar_labels;
-plot_scalp_eeg(bipolar_values,fs,bipolar_labels);
+plot_scalp_eeg_gain(bipolar_values,fs,bipolar_labels,20);
+%plot_scalp_eeg(bipolar_values,fs,bipolar_labels);
 
 if save_plot
     print(gcf,['../../results/',filename,'.png'],'-dpng')
