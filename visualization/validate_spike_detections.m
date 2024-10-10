@@ -3,11 +3,11 @@
 clear
 
 %% overwrite settings
-overwrite = 0;
+overwrite = 1;
 
 %% Name output file and edf directory
-edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/SN1/threshold_2/';
-out_file = 'SN1_three_threshold_validations.csv';
+edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/SN2/threshold_2/';
+out_file = 'SN2_three_threshold_validations_test.csv';
 
 %% File locations and set path
 locations = scalp_toolbox_locs;
@@ -35,8 +35,6 @@ else
 end
 
 
-%% Initialize gain
-gain = 20;
 
 %% Get subfolders
 % Get the directory contents
@@ -73,6 +71,9 @@ for s = 1:length(subfolderNames)
                 continue;
             end
         end
+
+        % Initialize gain
+        gain = 20;
         
         % Load and process the EDF file
         [values, chLabels, fs] = read_in_edf(edf_filename);
@@ -86,25 +87,41 @@ for s = 1:length(subfolderNames)
                 values(nan_indices, j) = nanmean(values(:, j));
             end
         end
-        
-        % High-pass filter
-        values = highpass(values, 0.5, fs);
-        values = bandstop(values, [58 62], fs);
-        
+
         % Demean the channels
         values = values - nanmean(values, 1);
+        
+        % High-pass filter
+        values = highpass(values, 1, fs);
+        values = bandstop(values, [58 62], fs);
+        
+        
         
         [bipolar_values, bipolar_labels] = scalp_bipolar(chLabels, values);
         data.bipolar_values = bipolar_values;
         data.bipolar_labels = bipolar_labels;
+
+        % also get car
+        [car_values,car_labels] = car_montage_2(values,chLabels);
         
+        % Initially set bipolar montage
+        montage_type = 'bipolar';
+        switch montage_type
+            case 'bipolar'
+                plot_values = bipolar_values;
+                plot_labels = bipolar_labels;
+            case 'car'
+                plot_values = car_values;
+                plot_labels = car_labels;
+        end
+
         % Create a figure for displaying the EEG data
         figure
         hFig = gcf;
         set(hFig, 'Position', [10 10 1400 1000]);
         tiledlayout(1, 1, 'Padding', 'compact');
         nexttile
-        plot_scalp_eeg_gain(bipolar_values, fs, bipolar_labels, gain);
+        plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
         
         % Initialize variables and store them in appdata
         user_input = '';
@@ -114,7 +131,10 @@ for s = 1:length(subfolderNames)
         setappdata(hFig, 'gain', gain);
         setappdata(hFig, 'bipolar_values', bipolar_values);
         setappdata(hFig, 'bipolar_labels', bipolar_labels);
+        setappdata(hFig, 'car_values', car_values);
+        setappdata(hFig, 'car_labels', car_labels);
         setappdata(hFig, 'fs', fs);
+        setappdata(hFig, 'montage_type', montage_type);
         
         % Set up the figure to detect key presses using WindowKeyPressFcn
         set(hFig, 'WindowKeyPressFcn', @keyPressHandler);
@@ -126,6 +146,7 @@ for s = 1:length(subfolderNames)
         arrow_key_input = getappdata(hFig, 'arrow_key_input');
         user_input = getappdata(hFig, 'user_input');
         gain = getappdata(hFig, 'gain');
+        montage_type = getappdata(hFig, 'montage_type');
         
         % Now you can safely close the figure
         if ishandle(hFig)
@@ -151,7 +172,10 @@ function keyPressHandler(hObject, event)
     gain = getappdata(hObject, 'gain');
     bipolar_values = getappdata(hObject, 'bipolar_values');
     bipolar_labels = getappdata(hObject, 'bipolar_labels');
+    car_values = getappdata(hObject, 'car_values');
+    car_labels = getappdata(hObject, 'car_labels');
     fs = getappdata(hObject, 'fs');
+    montage_type = getappdata(hObject, 'montage_type');
 
     % Handle key presses
     if strcmp(event.Key, 'uparrow')
@@ -160,19 +184,54 @@ function keyPressHandler(hObject, event)
         gain = gain - 10;
         setappdata(hObject, 'gain', gain);
         hold off
-        % Re-plot with updated gain
-        plot_scalp_eeg_gain(bipolar_values, fs, bipolar_labels, gain);
+        % Re-plot with new montage
+        switch montage_type
+            case 'bipolar'
+                plot_values = bipolar_values;
+                plot_labels = bipolar_labels;
+            case 'car'
+                plot_values = car_values;
+                plot_labels = car_labels;
+        end
+        plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
     elseif strcmp(event.Key, 'downarrow')
         disp('Down arrow pressed');
         arrow_key_input = 'down';
         gain = gain + 10;
         setappdata(hObject, 'gain', gain);
         hold off
-        % Re-plot with updated gain
-        plot_scalp_eeg_gain(bipolar_values, fs, bipolar_labels, gain);
+        % Re-plot with new montage
+        switch montage_type
+            case 'bipolar'
+                plot_values = bipolar_values;
+                plot_labels = bipolar_labels;
+            case 'car'
+                plot_values = car_values;
+                plot_labels = car_labels;
+        end
+        plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
+    elseif strcmp(event.Key, 'b') || strcmp(event.Key, 'c')
+            disp(['Montage change requested: ', event.Key]);
+            if strcmp(event.Key,'b')
+                montage_type = 'bipolar';
+            elseif strcmp(event.Key,'c')
+                montage_type = 'car';
+            end
+            setappdata(hObject, 'montage_type', montage_type);
+            hold off
+            % Re-plot with new montage
+            switch montage_type
+                case 'bipolar'
+                    plot_values = bipolar_values;
+                    plot_labels = bipolar_labels;
+                case 'car'
+                    plot_values = car_values;
+                    plot_labels = car_labels;
+            end
+            plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
     elseif strcmp(event.Key, 'return')
         % User pressed Enter to confirm input
-        if strcmp(user_input, 'y') || strcmp(user_input, 'n')
+        if strcmp(user_input, 'y') || strcmp(user_input, 'n') || strcmp(user_input, 'f')
             disp(['User input confirmed: ', user_input]);
             % Store the user input
             setappdata(hObject, 'user_input', user_input);
@@ -181,7 +240,7 @@ function keyPressHandler(hObject, event)
         else
             disp('Please press "y" or "n" before pressing Enter to confirm.');
         end
-    elseif strcmp(event.Key, 'y') || strcmp(event.Key, 'n')
+    elseif strcmp(event.Key, 'y') || strcmp(event.Key, 'n') || strcmp(event.Key, 'f')
         % Store the user's input character but wait for Enter to confirm
         user_input = event.Key;
         disp(['You pressed "', user_input, '". Press Enter to confirm.']);
