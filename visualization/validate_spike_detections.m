@@ -46,7 +46,7 @@ subfolderNames = {subfolders.name};  % Extract the names
 subfolderNames = subfolderNames(~ismember(subfolderNames, {'.', '..'}));  % Remove '.' and '..'
 
 % First, loop over subfolders
-for s = 1:length(subfolderNames)
+for s = 3%1:length(subfolderNames)
 
     sub_dir = [edf_dir,subfolderNames{s},'/'];
 
