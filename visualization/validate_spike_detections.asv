@@ -23,15 +23,12 @@ variableNames = {'Foldername', 'Filename', 'Response'};  % Replace with your des
 if overwrite == 0
     % Load the out file if it exists
     if exist([results_folder,out_file],"file") ~= 0
-        responses = readtable([results_folder,out_file],...
-            'ReadVariableNames', true,'HeaderLines', 0);
+        responses = readtable([results_folder,out_file]);
     else
-        responses = table('Size', [0, 3], 'VariableTypes', {'string', 'string', 'string'}, ...
-                  'VariableNames', variableNames);
+        responses = table('Size', [0, length(variableNames)], 'VariableTypes', repmat({'double'}, 1, length(variableNames)), 'VariableNames', variableNames);
     end
 else
-    responses = table('Size', [0, 3], 'VariableTypes', {'string', 'string', 'string'}, ...
-                  'VariableNames', variableNames);
+    responses = table('Size', [0, length(variableNames)], 'VariableTypes', repmat({'double'}, 1, length(variableNames)), 'VariableNames', variableNames); 
 end
 
 
@@ -66,12 +63,7 @@ for s = 1:length(subfolderNames)
             completed_folders = responses.Foldername;
             completed_files = responses.Filename;
 
-            if any(strcmp(completed_folders,subfolderNames{s}) & ...
-                    strcmp(completed_files,edf_files(i).name))
-                fprintf('\nAlready did %s and %s, skipping\n',...
-                    subfolderNames{s},edf_files(i).name);
-                continue;
-            end
+            if 
         end
         
         % Load and process the EDF file
@@ -135,13 +127,12 @@ for s = 1:length(subfolderNames)
         % Store the filename and response in the responses array
         responses(end+1,:) = {subfolderNames{s}, edf_files(i).name, user_input};
         
-        % Save the table as a CSV file (save as you go)
-        writetable(responses, [results_folder, out_file]);
 
     end
 end
 
-
+% Save the table as a CSV file
+writetable(responses, [results_folder, out_file]);
 
 % Nested key press handler function
 function keyPressHandler(hObject, event)
