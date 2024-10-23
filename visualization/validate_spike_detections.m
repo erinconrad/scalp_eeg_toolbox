@@ -3,11 +3,11 @@
 clear
 
 %% overwrite settings
-overwrite = 1;
+overwrite = 2;
 
 %% Name output file and edf directory
-edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/SN2/threshold_2/';
-out_file = 'SN2_three_threshold_validations_test.csv';
+edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/Persyst/';
+out_file = 'Persyst_test.csv';
 
 %% File locations and set path
 locations = scalp_toolbox_locs;
@@ -46,7 +46,7 @@ subfolderNames = {subfolders.name};  % Extract the names
 subfolderNames = subfolderNames(~ismember(subfolderNames, {'.', '..'}));  % Remove '.' and '..'
 
 % First, loop over subfolders
-for s = 3%1:length(subfolderNames)
+for s = 1:length(subfolderNames)
 
     sub_dir = [edf_dir,subfolderNames{s},'/'];
 
@@ -60,7 +60,7 @@ for s = 3%1:length(subfolderNames)
         edf_filename = fullfile(sub_dir, edf_files(i).name);
 
         % Look and see if we've done it already (if not overwriting)
-        if overwrite == 0
+        if overwrite == 0 || overwrite == 2
             completed_folders = responses.Foldername;
             completed_files = responses.Filename;
 
@@ -122,6 +122,7 @@ for s = 3%1:length(subfolderNames)
         tiledlayout(1, 1, 'Padding', 'compact');
         nexttile
         plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
+        fprintf('\nDisplaying %s\n',(edf_files(i).name))
         
         % Initialize variables and store them in appdata
         user_input = '';
@@ -156,8 +157,10 @@ for s = 3%1:length(subfolderNames)
         % Store the filename and response in the responses array
         responses(end+1,:) = {subfolderNames{s}, edf_files(i).name, user_input};
         
-        % Save the table as a CSV file (save as you go)
-        writetable(responses, [results_folder, out_file]);
+        if overwrite ~=2
+            % Save the table as a CSV file (save as you go)
+            writetable(responses, [results_folder, out_file]);
+        end
 
     end
 end
@@ -194,6 +197,7 @@ function keyPressHandler(hObject, event)
                 plot_labels = car_labels;
         end
         plot_scalp_eeg_gain(plot_values, fs, plot_labels, gain);
+        
     elseif strcmp(event.Key, 'downarrow')
         disp('Down arrow pressed');
         arrow_key_input = 'down';
