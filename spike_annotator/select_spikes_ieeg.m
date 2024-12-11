@@ -35,8 +35,8 @@ function select_spikes_ieeg(overwrite,do_ieeg)
     login_name = locations.ieeg_login;
 
     % ieeg filename
-    ieeg_files = {'HUP253_OR_explant_induction'};
-    start_times = [850.74];
+    ieeg_files = {'EMU1060_Day01_1'};
+    start_times = [5099.04];
     ieeg_duration = 15;
     
     % Directory containing the EDF files
@@ -140,6 +140,10 @@ function select_spikes_ieeg(overwrite,do_ieeg)
             'Position', [0.1, 0.95, 0.8, 0.03], 'String', '', 'FontSize', 12, ...
             'HorizontalAlignment', 'center', 'BackgroundColor', 'white');
         
+        % Add a button for channel selection
+        channel_button = uicontrol('Style', 'pushbutton', 'Parent', hFig, 'Units', 'normalized', ...
+            'Position', [0.82, 0.95, 0.08, 0.04], 'String', 'Channels', 'FontSize', 12, ...
+            'Callback', @channelButtonCallback);
         
         % Initialize variables for appdata
         setappdata(hFig, 'gain', gain);
@@ -156,6 +160,11 @@ function select_spikes_ieeg(overwrite,do_ieeg)
         setappdata(hFig, 'montage_warning_stage', false);
         setappdata(hFig, 'requested_montage', '');
         setappdata(hFig, 'message_text', message_text);  % Store message text handle
+        setappdata(hFig, 'channel_visibility', []);  % Initialize channel visibility
+        setappdata(hFig, 'axes_handle', ax);  % Store axes handle
+        setappdata(hFig, 'edf_files', edf_files);  % Store edf_files
+        setappdata(hFig, 'current_file_index', i);  % Store current file index
+        
         
         % Set up figure callbacks
         set(hFig, 'WindowKeyPressFcn', @keyPressHandler);
@@ -275,8 +284,10 @@ function select_spikes_ieeg(overwrite,do_ieeg)
         chLabels = getappdata(hObject, 'chLabels');
         fs = getappdata(hObject, 'fs');
         confirmation_stage = getappdata(hObject, 'confirmation_stage');
+        requested_montage = getappdata(hObject, 'requested_montage');
         montage_warning_stage = getappdata(hObject, 'montage_warning_stage');
         selected_spikes = getappdata(hObject, 'selected_spikes');
+        channel_visibility = getappdata(hObject, 'channel_visibility');
         
         if strcmp(event.Key, 'uparrow')
             update_message(hObject, 'Gain decreased.');
@@ -296,7 +307,7 @@ function select_spikes_ieeg(overwrite,do_ieeg)
             setappdata(hObject, 'requested_montage', '');
         elseif strcmp(event.Key, 'b') || strcmp(event.Key, 'c')
             % Montage change requested
-            requested_montage = event.Key;
+            %requested_montage = event.Key;
             if ~isempty(selected_spikes)
                 if ~montage_warning_stage || ~strcmp(requested_montage, event.Key)
                     update_message(hObject, ['Changing the montage will de-select all currently selected spikes. ', ...
@@ -306,10 +317,11 @@ function select_spikes_ieeg(overwrite,do_ieeg)
                 else
                     % User confirms montage change
                     update_message(hObject, ['Montage changed to ', event.Key, '. Spikes de-selected.']);
-                    montage_type = requested_montage;
+                    montage_type = event.Key;
                     setappdata(hObject, 'montage_type', montage_type);
                     setappdata(hObject, 'selected_spikes', {});  % Clear selected spikes
                     setappdata(hObject, 'highlight_patches', {});  % Clear highlights
+                    setappdata(hObject, 'channel_visibility', []);  % Reset channel visibility
                     setappdata(hObject, 'montage_warning_stage', false);
                     setappdata(hObject, 'requested_montage', '');
                     redraw_plot(hObject);
@@ -319,6 +331,8 @@ function select_spikes_ieeg(overwrite,do_ieeg)
                 update_message(hObject, ['Montage changed to ', event.Key]);
                 montage_type = event.Key;
                 setappdata(hObject, 'montage_type', montage_type);
+                setappdata(hObject, 'channel_visibility', []);  % Reset channel visibility
+
                 redraw_plot(hObject);
             end
         elseif strcmp(event.Key, 'return')
@@ -341,80 +355,127 @@ function select_spikes_ieeg(overwrite,do_ieeg)
     end
 
     
+   
     function mouseClickHandler(hObject, ~)
-        % Handle mouse clicks
-        ax = hObject.CurrentAxes;
-        fs = getappdata(hObject, 'fs');
-        processed_values = getappdata(hObject, 'processed_values');
-        processed_labels = getappdata(hObject, 'processed_labels');
-        selected_spikes = getappdata(hObject, 'selected_spikes');
-        highlight_patches = getappdata(hObject, 'highlight_patches');
-        gain = getappdata(hObject, 'gain');
-    
-        % Ensure selected_spikes is a cell array
-        if isempty(selected_spikes)
-            selected_spikes = {};
-        end
-    
-        % Get click coordinates
-        clickPoint = get(ax, 'CurrentPoint');
-        x_click = clickPoint(1, 1);  % Time
-        y_click = clickPoint(1, 2);  % Channel offset
-    
-        % Find the closest channel
-        n_channels = length(processed_labels);
-        offsets = (1:n_channels)' * gain * 10;  % Same offset calculation
-        [~, ch_idx] = min(abs(offsets - y_click));
-        channel = processed_labels{ch_idx};
-    
-        % Find the closest time sample
-        time = x_click;
-        sample_idx = round(time * fs);
-        sample_idx = max(min(sample_idx, size(processed_values, 1)), 1);  % Ensure within bounds
-    
-        % Define time window around the click (±0.25 seconds for highlight)
-        window_samples = round(0.25 * fs);  % Half a second total for highlight
-        start_idx = max(sample_idx - window_samples, 1);
-        end_idx = min(sample_idx + window_samples, size(processed_values, 1));
-    
-        % Define sample tolerance for de-selection (±0.5 seconds)
-        sample_tolerance = round(0.5 * fs);
-    
-        % Check if this spike is already selected (within tolerance)
-        existing_idx = find(cellfun(@(x) x(1) == ch_idx && abs(x(2) - sample_idx) <= sample_tolerance, selected_spikes), 1);
-    
-        if isempty(existing_idx)
-            % Add spike to selections
-            selected_spikes{end+1} = [ch_idx, sample_idx];
-            % Update message
-            update_message(hObject, ['Spike selected at ', processed_labels{ch_idx}, ', Time: ', num2str(time, '%.2f'), ' s']);
-            % Highlight the selected area
+    % Handle mouse clicks
+    ax = hObject.CurrentAxes;
+    fs = getappdata(hObject, 'fs');
+    processed_values = getappdata(hObject, 'processed_values');
+    processed_labels = getappdata(hObject, 'processed_labels');
+    selected_spikes = getappdata(hObject, 'selected_spikes');
+    highlight_patches = getappdata(hObject, 'highlight_patches');
+    gain = getappdata(hObject, 'gain');
+    channel_visibility = getappdata(hObject, 'channel_visibility');
+
+    % Get handles to plot and labels for highlighting
+    plot_handles = getappdata(hObject, 'plot_handles');  % Handles for plotted EEG channels
+    ytick_labels = ax.YTickLabel;  % Get the current y-tick labels (channel labels)
+
+    % Handle temporary highlighting
+    highlighted_trace = getappdata(hObject, 'highlighted_trace');
+    highlighted_label_idx = getappdata(hObject, 'highlighted_label_idx');
+
+    % Ensure selected_spikes is a cell array
+    if isempty(selected_spikes)
+        selected_spikes = {};
+        highlight_patches = {};
+    end
+
+    % Filter channels based on visibility
+    if isempty(channel_visibility)
+        channel_visibility = true(length(processed_labels), 1);
+    end
+    visible_channels = find(channel_visibility);
+    filtered_labels = processed_labels(visible_channels);
+    filtered_values = processed_values(:, visible_channels);
+
+    % Get click coordinates
+    clickPoint = get(ax, 'CurrentPoint');
+    x_click = clickPoint(1, 1);  % Time
+    y_click = clickPoint(1, 2);  % Channel offset
+
+    % Find the closest channel in filtered list
+    n_channels = length(filtered_labels);
+    offsets = (1:n_channels)' * gain * 10;  % Same offset calculation
+    [~, visible_ch_idx] = min(abs(offsets - y_click));
+    ch_idx = visible_channels(visible_ch_idx);  % Map back to original channel index
+    channel = processed_labels{ch_idx};
+
+    % Find the closest time sample
+    time = x_click;
+    sample_idx = round(time * fs);
+    sample_idx = max(min(sample_idx, size(processed_values, 1)), 1);  % Ensure within bounds
+
+    % Define sample tolerance for de-selection (±0.5 seconds)
+    sample_tolerance = round(0.5 * fs);
+
+    % Check if this spike is already selected (within tolerance)
+    existing_idx = find(cellfun(@(x) x(1) == ch_idx && abs(x(2) - sample_idx) <= sample_tolerance, selected_spikes), 1);
+
+    if isempty(existing_idx)
+        % Add spike to selections
+        selected_spikes{end+1} = [ch_idx, sample_idx];
+
+        % Highlight the selected area if channel is visible
+        if channel_visibility(ch_idx)
+            % Define time window around the click (±0.25 seconds for highlight)
+            window_samples = round(0.25 * fs);  % Half a second total for highlight
+            start_idx = max(sample_idx - window_samples, 1);
+            end_idx = min(sample_idx + window_samples, size(processed_values, 1));
             t = (start_idx:end_idx) / fs;
-            y_offset = offsets(ch_idx);
+
+            % Get channel offset in filtered channels
+            n_channels = length(filtered_labels);
+            offsets = (1:n_channels)' * gain * 10;
+            y_offset = offsets(visible_ch_idx);
             y_data = [y_offset - gain*5, y_offset + gain*5];
             hPatch = patch(ax, [t, fliplr(t)], [repmat(y_data(1), 1, length(t)), repmat(y_data(2), 1, length(t))], ...
                 'r', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
             highlight_patches{end+1} = hPatch;
         else
-            % Remove spike from selections
-            selected_spikes(existing_idx) = [];
-            % Update message
-            update_message(hObject, ['Spike de-selected at ', processed_labels{ch_idx}, ', Time: ', num2str(time, '%.2f'), ' s']);
-            % Remove highlight
-            delete(highlight_patches{existing_idx});
-            highlight_patches(existing_idx) = [];
+            % Channel is not visible, so we don't draw the highlight
+            highlight_patches{end+1} = [];
         end
-    
-        % Update appdata
-        setappdata(hObject, 'selected_spikes', selected_spikes);
-        setappdata(hObject, 'highlight_patches', highlight_patches);
+        % Update message
+        update_message(hObject, ['Spike selected at ', processed_labels{ch_idx}, ', Time: ', num2str(time, '%.2f'), ' s']);
+    else
+        % Remove spike from selections
+        selected_spikes(existing_idx) = [];
+        % Remove highlight if it exists
+        if ~isempty(highlight_patches{existing_idx})
+            delete(highlight_patches{existing_idx});
+        end
+        highlight_patches(existing_idx) = [];
+        % Update message
+        update_message(hObject, ['Spike de-selected at ', processed_labels{ch_idx}, ', Time: ', num2str(time, '%.2f'), ' s']);
     end
 
-    % Add update_message function
-    function update_message(hObject, message)
-        message_text = getappdata(hObject, 'message_text');
-        set(message_text, 'String', message);
+    % --- Temporary highlight of most recent selected spike ---
+
+    % Restore previous highlight (if any)
+    if ~isempty(highlighted_trace)
+        set(highlighted_trace, 'Color', 'k', 'LineWidth', 1);  % Reset previous trace to black and normal thickness
     end
+    if ~isempty(highlighted_label_idx)
+        set(ax, 'FontWeight', 'normal');  % Reset previous label to normal
+    end
+
+    % Highlight the current selected spike trace and label
+    set(plot_handles(visible_ch_idx), 'Color', 'b', 'LineWidth', 2);  % Highlight in blue
+    set(ax, 'FontWeight', 'bold');  % Make current label bold
+
+    % Store the new highlighted trace and label index
+    setappdata(hObject, 'highlighted_trace', plot_handles(visible_ch_idx));
+    setappdata(hObject, 'highlighted_label_idx', visible_ch_idx);
+
+    % Update appdata
+    setappdata(hObject, 'selected_spikes', selected_spikes);
+    setappdata(hObject, 'highlight_patches', highlight_patches);
+end
+
+
+
+  
     
     function redraw_plot(hObject)
         % Redraw the EEG plot with current settings
@@ -426,44 +487,180 @@ function select_spikes_ieeg(overwrite,do_ieeg)
         selected_spikes = getappdata(hObject, 'selected_spikes');
         highlight_patches = getappdata(hObject, 'highlight_patches');
         ax = getappdata(hObject, 'axes_handle');  % Retrieve axes handle
+        channel_visibility = getappdata(hObject, 'channel_visibility');
 
         
         % Apply montage
         [processed_values, processed_labels] = apply_montage(chLabels, values, montage_type);
         setappdata(hObject, 'processed_values', processed_values);
         setappdata(hObject, 'processed_labels', processed_labels);
+
+         % If channel_visibility is empty, default to showing all channels
+        if isempty(channel_visibility)
+            channel_visibility = true(length(processed_labels), 1);
+        end
+        % Update channel_visibility in appdata
+        setappdata(hObject, 'channel_visibility', channel_visibility);
+    
+        % Filter channels based on visibility
+        visible_channels = find(channel_visibility);
+        filtered_values = processed_values(:, visible_channels);
+        filtered_labels = processed_labels(visible_channels);
         
         % Clear axes and re-plot
         cla(ax); 
-        plot_eeg(ax, processed_values, fs, processed_labels, gain);
+        plot_eeg(ax, filtered_values, fs, filtered_labels, gain);
         hold(ax,'on');
         
         % Redraw highlights
-        setappdata(hObject, 'highlight_patches', {});
+        % Initialize a new cell array for highlight patches
+        new_highlight_patches = cell(size(selected_spikes));
         for idx = 1:length(selected_spikes)
             spike_id = selected_spikes{idx};
             ch_idx = spike_id(1);
             sample_idx = spike_id(2);
-            
-            % Define time window around the spike
-            window_samples = round(0.25 * fs);  % Half a second total
-            start_idx = max(sample_idx - window_samples, 1);
-            end_idx = min(sample_idx + window_samples, size(processed_values, 1));
-            t = (start_idx:end_idx) / fs;
-            
-            % Get channel offset
-            offsets = (1:length(processed_labels))' * gain * 10;
-            y_offset = offsets(ch_idx);
-            y_data = [y_offset - gain*5, y_offset + gain*5];
-            hPatch = patch(ax, [t, fliplr(t)], [repmat(y_data(1), 1, length(t)), repmat(y_data(2), 1, length(t))], ...
-                'r', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
-            highlight_patches{idx} = hPatch;
+
+            % Check if this channel is visible
+            if channel_visibility(ch_idx)
+                % Find the index of this channel in the filtered list
+                visible_ch_idx = find(visible_channels == ch_idx);
+
+                % Define time window around the spike
+                window_samples = round(0.25 * fs);  % Half a second total
+                start_idx = max(sample_idx - window_samples, 1);
+                end_idx = min(sample_idx + window_samples, size(processed_values, 1));
+                t = (start_idx:end_idx) / fs;
+
+                % Get channel offset
+                n_channels = length(filtered_labels);
+                offsets = (1:n_channels)' * gain * 10;
+                y_offset = offsets(visible_ch_idx);
+                y_data = [y_offset - gain*5, y_offset + gain*5];
+                hPatch = patch(ax, [t, fliplr(t)], [repmat(y_data(1), 1, numel(t)), repmat(y_data(2), 1, numel(t))], ...
+                    'r', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+                new_highlight_patches{idx} = hPatch;
+            else
+                % Channel is not visible, skip highlighting
+                new_highlight_patches{idx} = [];
+            end
         end
-        setappdata(hObject, 'highlight_patches', highlight_patches);
+        % Update highlight_patches in appdata
+        setappdata(hObject, 'highlight_patches', new_highlight_patches);
+
         
         title(['File: ', file_names{i}], 'Interpreter', 'none');
     end
     
+    function update_message(hObject, message)
+        % Update the message displayed in the GUI
+        message_text = getappdata(hObject, 'message_text');
+        set(message_text, 'String', message);
+    end
+
+    function channelButtonCallback(hObject, ~)
+    % Callback function for the Channels button
+    hFig = ancestor(hObject, 'figure');
+    processed_labels = getappdata(hFig, 'processed_labels');
+    channel_visibility = getappdata(hFig, 'channel_visibility');
+
+    % Prepare data for the table
+    num_channels = length(processed_labels);
+    if isempty(channel_visibility)
+        channel_visibility = true(num_channels, 1);
+    end
+
+    % Create the figure for channel selection
+    dlg_title = 'Select Channels to Display';
+    selectionFig = figure('Name', dlg_title, 'NumberTitle', 'off', 'MenuBar', 'none', ...
+        'ToolBar', 'none', 'Resize', 'off', 'WindowStyle', 'modal');
+    set(selectionFig, 'Position', [100, 100, 300, 400]);
+
+    % Prepare data for the table
+    data = [num2cell(channel_visibility), processed_labels];
+    % Column names
+    colnames = {'Show', 'Channel'};
+    % Column format
+    columnformat = {'logical', 'char'};
+    % Column editable
+    columneditable = [true, false];
+
+    % Create the uitable
+    t = uitable('Parent', selectionFig, 'Units', 'normalized', 'Position', [0.05, 0.15, 0.9, 0.8], ...
+        'Data', data, 'ColumnName', colnames, 'ColumnFormat', columnformat, ...
+        'ColumnEditable', columneditable, 'RowName', [], 'CellSelectionCallback', @cellSelectionCallback);
+
+    % Store selected rows in appdata
+    setappdata(selectionFig, 'selectedRows', []);
+
+    % Add Select, Deselect, OK, and Cancel buttons
+    select_button = uicontrol('Style', 'pushbutton', 'Parent', selectionFig, 'Units', 'normalized', ...
+        'Position', [0.05, 0.02, 0.2, 0.1], 'String', 'Select', 'FontSize', 12, ...
+        'Callback', @selectButtonCallback);
+
+    deselect_button = uicontrol('Style', 'pushbutton', 'Parent', selectionFig, 'Units', 'normalized', ...
+        'Position', [0.28, 0.02, 0.2, 0.1], 'String', 'Deselect', 'FontSize', 12, ...
+        'Callback', @deselectButtonCallback);
+
+    ok_button = uicontrol('Style', 'pushbutton', 'Parent', selectionFig, 'Units', 'normalized', ...
+        'Position', [0.51, 0.02, 0.2, 0.1], 'String', 'OK', 'FontSize', 12, ...
+        'Callback', @okButtonCallback);
+
+    cancel_button = uicontrol('Style', 'pushbutton', 'Parent', selectionFig, 'Units', 'normalized', ...
+        'Position', [0.74, 0.02, 0.2, 0.1], 'String', 'Cancel', 'FontSize', 12, ...
+        'Callback', @cancelButtonCallback);
+
+    % Callback functions
+    function cellSelectionCallback(~, event)
+        % Keep track of selected rows, ensuring no duplicates
+        selectedRows = unique(event.Indices(:,1));
+        setappdata(selectionFig, 'selectedRows', selectedRows);
+    end
+
+    function selectButtonCallback(~, ~)
+        % Toggle 'Select' for the selected rows
+        selectedRows = getappdata(selectionFig, 'selectedRows');
+        if isempty(selectedRows)
+            return;
+        end
+        data = get(t, 'Data');
+        for idx = 1:length(selectedRows)
+            data{selectedRows(idx), 1} = true;  % Set checkboxes to true (select)
+        end
+        set(t, 'Data', data);  % Update the table
+    end
+
+    function deselectButtonCallback(~, ~)
+        % Toggle 'Deselect' for the selected rows
+        selectedRows = getappdata(selectionFig, 'selectedRows');
+        if isempty(selectedRows)
+            return;
+        end
+        data = get(t, 'Data');
+        for idx = 1:length(selectedRows)
+            data{selectedRows(idx), 1} = false;  % Set checkboxes to false (deselect)
+        end
+        set(t, 'Data', data);  % Update the table
+    end
+
+    function okButtonCallback(~, ~)
+        % Get the data from the table
+        table_data = get(t, 'Data');
+        new_visibility = cell2mat(table_data(:, 1));
+        % Update the channel visibility in appdata
+        setappdata(hFig, 'channel_visibility', new_visibility);
+        % Close the selection figure
+        close(selectionFig);
+        % Redraw the plot with updated visibility
+        redraw_plot(hFig);
+    end
+
+    function cancelButtonCallback(~, ~)
+        % Close the selection figure without changing anything
+        close(selectionFig);
+    end
+end
+
+
     function figureCloseRequest(hObject, ~)
         disp('Figure close requested by user.');
         % Resume execution in case uiwait is blocking

@@ -19,12 +19,14 @@ for ich = 1:nchs
     offset = offset+added_offset;
     text(dur+0.05,ch_bl(ich),sprintf('%s',labels{ich}),'fontsize',15)
     
+    %{
     if ich < nchs
         if ~isnan(min(values(:,ich)) - max(values(:,ich+1)))
             offset = offset - (min(values(:,ich)) - max(values(:,ich+1)));
         end
         
     end
+    %}
     
 end
 

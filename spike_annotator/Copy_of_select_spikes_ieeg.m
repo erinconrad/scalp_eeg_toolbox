@@ -1,4 +1,4 @@
-function select_spikes_gui(overwrite)
+function select_spikes_ieeg(overwrite,do_ieeg)
     % select_spikes_gui
     % This script allows users to select epileptiform discharges in EEG data.
     % It supports an overwrite option to control processing of files.
@@ -9,9 +9,14 @@ function select_spikes_gui(overwrite)
     
     if nargin < 1
         overwrite = 0;  % Default to not overwriting existing results
+        do_ieeg = 0;
+    end
+
+    if nargin < 2
+        do_ieeg = 0;
     end
     
-    clearvars -except overwrite
+    clearvars -except overwrite do_ieeg
 
     %% File locations and set path
     locations = scalp_toolbox_locs;
@@ -22,10 +27,32 @@ function select_spikes_gui(overwrite)
     if ~exist(results_folder, 'dir')
         mkdir(results_folder);
     end
+
+    % ieeg stuff
+    ieeg_folder = locations.ieeg_folder;
+    addpath(genpath(ieeg_folder));
+    pwfile = locations.ieeg_pw_file;
+    login_name = locations.ieeg_login;
+
+    % ieeg filename
+    ieeg_files = {'HUP253_OR_explant_induction'};
+    start_times = [850.74];
+    ieeg_duration = 15;
     
     % Directory containing the EDF files
     edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/SN2/threshold_2/edf_9';
     edf_files = dir(fullfile(edf_dir, '*.edf'));
+
+    if do_ieeg
+        nfiles = length(ieeg_files);
+        file_names = ieeg_files;
+    else
+        nfiles = length(edf_files);
+        file_names = {};
+        for i_f = 1:nfiles
+            file_names = [file_names;edf_files(i_f).name];
+        end
+    end
     
     % Path to the results CSV file
     results_file = fullfile(results_folder, 'spike_selections.csv');
@@ -35,48 +62,63 @@ function select_spikes_gui(overwrite)
     montage_type = 'default';  % Possible values: 'default', 'b', 'c'
     
     % Check overwrite option and existing results
-    if overwrite == 0 && exist(results_file, 'file')
-        % Load existing results
-        opts = detectImportOptions(results_file, 'Delimiter', ',', 'VariableNamingRule', 'preserve');
-        existing_results = readtable(results_file, opts);
-
-        processed_files = unique(existing_results.Filename);
-        % Find indices of EDF files that have not been processed yet
-        unprocessed_files = [];
-        for i = 1:length(edf_files)
-            if ~ismember(edf_files(i).name, processed_files)
-                unprocessed_files = [unprocessed_files, i];
+    if ~do_ieeg
+        if overwrite == 0 && exist(results_file, 'file')
+            % Load existing results
+            opts = detectImportOptions(results_file, 'Delimiter', ',', 'VariableNamingRule', 'preserve');
+            existing_results = readtable(results_file, opts);
+    
+            processed_files = unique(existing_results.Filename);
+            % Find indices of EDF files that have not been processed yet
+            unprocessed_files = [];
+            for i = 1:length(edf_files)
+                if ~ismember(edf_files(i).name, processed_files)
+                    unprocessed_files = [unprocessed_files, i];
+                end
             end
-        end
-        % Update edf_files to only include unprocessed files
-        edf_files = edf_files(unprocessed_files);
-        % Check if there are files to process
-        if isempty(edf_files)
-            disp('All files have been processed.');
-            return;
+            % Update edf_files to only include unprocessed files
+            edf_files = edf_files(unprocessed_files);
+            % Check if there are files to process
+            if isempty(edf_files)
+                disp('All files have been processed.');
+                return;
+            else
+                disp(['Resuming from file: ', edf_files(1).name]);
+            end
         else
-            disp(['Resuming from file: ', edf_files(1).name]);
+            % If overwrite is 1 or results file doesn't exist, proceed as usual
+            if overwrite == 1 && exist(results_file, 'file')
+                delete(results_file);  % Delete existing results file
+                disp('Existing results file deleted. Starting from the first file.');
+            else
+                disp('Starting from the first file.');
+            end
+            % edf_files remains as is
         end
-    else
-        % If overwrite is 1 or results file doesn't exist, proceed as usual
-        if overwrite == 1 && exist(results_file, 'file')
-            delete(results_file);  % Delete existing results file
-            disp('Existing results file deleted. Starting from the first file.');
-        else
-            disp('Starting from the first file.');
-        end
-        % edf_files remains as is
     end
     
     % Loop through each EDF file
-    for i = 1:length(edf_files)
-        % Get the full path of the current EDF file
-        edf_filename = fullfile(edf_dir, edf_files(i).name);
-        
-        % Load and process the EDF file
-        [values, chLabels, fs] = read_in_edf(edf_filename);
-        data.fs = fs;
-        data.values = values;
+    for i = 1:nfiles
+        if do_ieeg
+            data = download_ieeg_data(file_names{i},login_name,pwfile,...
+                [start_times(i) start_times(i)+ieeg_duration],1); % 1 means get lots of data
+            values = data.values;
+            chLabels = data.chLabels(:,1);
+            fs = data.fs;
+
+            non_intracranial = find_non_intracranial(chLabels);
+            values = values(:,~non_intracranial);
+            chLabels = chLabels(~non_intracranial);
+
+        else
+            % Get the full path of the current EDF file
+            edf_filename = fullfile(edf_dir, edf_files(i).name);
+            
+            % Load and process the EDF file
+            [values, chLabels, fs] = read_in_edf(edf_filename);
+            data.fs = fs;
+            data.values = values;
+        end
         
         % Preprocess the data
         values = preprocess_eeg(values, fs);
@@ -90,7 +132,8 @@ function select_spikes_gui(overwrite)
         ax = axes(hFig);
         plot_handles = plot_eeg(ax, processed_values, fs, processed_labels, gain);
         hold on  % Allow adding highlights
-        title(['File: ', edf_files(i).name], 'Interpreter', 'none');
+        title(['File: ', file_names{i}], 'Interpreter', 'none');
+        setappdata(hFig, 'axes_handle', ax);
 
         % Add a text box for displaying messages
         message_text = uicontrol('Style', 'text', 'Parent', hFig, 'Units', 'normalized', ...
@@ -139,8 +182,8 @@ function select_spikes_gui(overwrite)
         end
         
         % Save the spike selections to the CSV file
-        save_spike_selections({edf_files(i).name, selected_spikes}, results_file, fs, processed_labels);
-        disp(['Spike selections for ', edf_files(i).name, ' saved.']);
+        save_spike_selections({file_names{i}, selected_spikes}, results_file, fs, processed_labels);
+        disp(['Spike selections for ', file_names{i}, ' saved.']);
     end
     
     disp('Processing completed.');
@@ -170,16 +213,29 @@ function select_spikes_gui(overwrite)
         switch montage_type
             case 'default'
                 % Default montage (e.g., bipolar montage)
-                [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                if do_ieeg
+                    [processed_values,~,processed_labels] =...
+                        bipolar_montage(values,chLabels,[],[],[],[]);
+                else
+                    [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                end
             case 'b'
-                % Alternative montage 'b' (user-defined)
-                [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                if do_ieeg
+                    [processed_values,~,processed_labels] =...
+                        bipolar_montage(values,chLabels,[],[],[],[]);
+                else
+                    [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                end
             case 'c'
                 % Alternative montage 'c' (user-defined)
                 [processed_values, processed_labels] = car_montage_2(values,chLabels);
             otherwise
-                % Default to bipolar montage if unknown
-                [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                if do_ieeg
+                    [processed_values,~,processed_labels] =...
+                        bipolar_montage(values,chLabels,[],[],[],[]);
+                else
+                    [processed_values, processed_labels] = scalp_bipolar(chLabels, values);
+                end
         end
     end
     
@@ -354,6 +410,11 @@ function select_spikes_gui(overwrite)
         setappdata(hObject, 'highlight_patches', highlight_patches);
     end
 
+    % Add update_message function
+    function update_message(hObject, message)
+        message_text = getappdata(hObject, 'message_text');
+        set(message_text, 'String', message);
+    end
     
     function redraw_plot(hObject)
         % Redraw the EEG plot with current settings
@@ -364,6 +425,8 @@ function select_spikes_gui(overwrite)
         fs = getappdata(hObject, 'fs');
         selected_spikes = getappdata(hObject, 'selected_spikes');
         highlight_patches = getappdata(hObject, 'highlight_patches');
+        ax = getappdata(hObject, 'axes_handle');  % Retrieve axes handle
+
         
         % Apply montage
         [processed_values, processed_labels] = apply_montage(chLabels, values, montage_type);
@@ -371,10 +434,9 @@ function select_spikes_gui(overwrite)
         setappdata(hObject, 'processed_labels', processed_labels);
         
         % Clear axes and re-plot
-        clf(hObject);
-        ax = axes(hObject);
+        cla(ax); 
         plot_eeg(ax, processed_values, fs, processed_labels, gain);
-        hold on
+        hold(ax,'on');
         
         % Redraw highlights
         setappdata(hObject, 'highlight_patches', {});
@@ -399,7 +461,7 @@ function select_spikes_gui(overwrite)
         end
         setappdata(hObject, 'highlight_patches', highlight_patches);
         
-        title(['File: ', edf_files(i).name], 'Interpreter', 'none');
+        title(['File: ', file_names{i}], 'Interpreter', 'none');
     end
     
     function figureCloseRequest(hObject, ~)

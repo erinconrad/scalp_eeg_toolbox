@@ -6,8 +6,9 @@ clear
 overwrite = 2;
 
 %% Name output file and edf directory
-edf_dir = '/Users/erinconrad/Library/CloudStorage/Box-Box/SN12_three_threshold/Persyst/';
-out_file = 'Persyst_test.csv';
+edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/';
+subfolder_name = 'edf_Nov1924';
+out_file = 'persyst_50_test.csv';
 
 %% File locations and set path
 locations = scalp_toolbox_locs;
@@ -47,6 +48,12 @@ subfolderNames = subfolderNames(~ismember(subfolderNames, {'.', '..'}));  % Remo
 
 % First, loop over subfolders
 for s = 1:length(subfolderNames)
+
+    if ~isempty(subfolder_name)
+        if ~strcmp(subfolderNames{s},subfolder_name)
+            continue
+        end
+    end
 
     sub_dir = [edf_dir,subfolderNames{s},'/'];
 
