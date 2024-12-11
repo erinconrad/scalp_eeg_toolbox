@@ -1,7 +1,8 @@
 % clean_spike_validator.m
 %{
 Instructions:
-1. Install dependencies (ensure all required toolboxes are installed) and add to path
+1. Make sure you have Matlab's Biosignal Processing Toolbox (required for
+builtin functions to load edf files)
 2. Update paths below
 3. Navigate to directory containing this script and type
    >> clean_spike_validator
