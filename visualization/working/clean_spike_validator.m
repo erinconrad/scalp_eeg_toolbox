@@ -32,7 +32,7 @@ out_file = 'selections.csv'; % Output CSV file name
 % overwrite = 0 (default): skip previously completed files
 % overwrite = 1: re-write selections of all files
 % overwrite = 2: show all files, but do not save any selections
-overwrite = 0;
+overwrite = 1;
 
 %{ ----- NO NEED TO EDIT BELOW THIS ------------ %}
 
@@ -75,7 +75,7 @@ for i = 1:length(edf_files)
     end
     
     %% Load and process the EDF file
-    [values, chLabels, fs] = read_in_edf(edf_filename); % Ensure this function is available
+    [values, chLabels, fs] = read_in_edf_clean(edf_filename); % Ensure this function is available
     
     % Initialize gain
     gain = 50;
@@ -175,6 +175,28 @@ for i = 1:length(edf_files)
 end
 
 %% Function Definitions
+
+function [out, chLabels, fs] = read_in_edf_clean(filepath)
+
+data = edfread(filepath);
+info = edfinfo(filepath);
+fs = info.NumSamples(1);
+
+chs = info.SignalLabels;
+nchs = length(chs);
+
+nsamples = size(data,1) * fs;
+
+out = nan(nsamples,nchs);
+
+for i = 1:nchs
+    out(:,i) = cell2mat(data.(chs(i)));
+
+end
+
+chLabels = cellstr(chs);
+
+end
 
 function [prompt_text, selection_text] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, user_input)
     % This function plots the EEG data and adds prompt and selection texts
