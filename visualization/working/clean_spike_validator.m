@@ -33,7 +33,7 @@ out_file = 'selections.csv'; % Output CSV file name
 % overwrite = 0 (default): skip previously completed files
 % overwrite = 1: re-write selections of all files
 % overwrite = 2: show all files, but do not save any selections
-overwrite = 1;
+overwrite = 0;
 
 %{ ----- NO NEED TO EDIT BELOW THIS ------------ %}
 
@@ -176,6 +176,8 @@ for i = 1:length(edf_files)
 end
 
 %% Function Definitions
+%function clean_temple
+
 
 function [out, chLabels, fs] = read_in_edf_clean(filepath)
 
@@ -185,13 +187,19 @@ fs = info.NumSamples(1);
 
 chs = info.SignalLabels;
 nchs = length(chs);
+chs = replace(chs, "-", "_");
+chs = replace(chs, " ", "");
 
 nsamples = size(data,1) * fs;
 
 out = nan(nsamples,nchs);
 
 for i = 1:nchs
-    out(:,i) = cell2mat(data.(chs(i)));
+    if iscell(data.(chs(i)))
+        out(:,i) = cell2mat(data.(chs(i)));
+    else
+        continue
+    end
 
 end
 
