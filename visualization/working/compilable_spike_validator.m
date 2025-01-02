@@ -1,32 +1,70 @@
-% clean_spike_validator.m
-%{
-Instructions:
-1. Make sure you have Matlab's Biosignal Processing Toolbox (required for
-builtin functions to load edf files)
-2. Update paths below
-3. Navigate to directory containing this script and type
-   >> clean_spike_validator
+function createApp()
+    % Create the figure
+    fig = uifigure('Position', [100 100 500 250], 'Name', 'Data Processor');
 
-The script will loop over all EDF files in a single directory and display
-the EEG in each EDF file. The user will be prompted to select if the spike
-is left (l), right (r), midline (m), or if there is no spike (n). The user
-will then press return/enter to confirm the choice. Selections will be
-saved in a CSV file in the directory containing EDF files.
+    % Input Path Components
+    uilabel(fig, 'Position', [20 180 100 22], 'Text', 'Input File:');
+    inputField = uieditfield(fig, 'text', 'Position', [130 180 250 22], 'Editable', 'off');
+    inputButton = uibutton(fig, 'push', 'Position', [400 180 60 22], 'Text', 'Browse', ...
+        'ButtonPushedFcn', @(btn,event) browseInput());
 
-The montage can be toggled between bipolar (b) and CAR (c).
+    % Output Path Components
+    uilabel(fig, 'Position', [20 130 100 22], 'Text', 'Output File:');
+    outputField = uieditfield(fig, 'text', 'Position', [130 130 250 22], 'Editable', 'off');
+    outputButton = uibutton(fig, 'push', 'Position', [400 130 60 22], 'Text', 'Browse', ...
+        'ButtonPushedFcn', @(btn,event) browseOutput());
 
-Pressing the up or down arrow will adjust the gain.
+    % Run Button
+    runButton = uibutton(fig, 'push', 'Position', [200 50 100 30], 'Text', 'Run', ...
+        'ButtonPushedFcn', @(btn,event) runProcessing());
 
-The default overwrite setting (0) is to not re-present any EDF files the
-user has already completed. Changing this to overwrite = 1 will allow the
-user to repeat spike selections for all files.
-%}
+    % Status Label
+    statusLabel = uilabel(fig, 'Position', [20 20 460 22], 'Text', 'Status: Waiting for input...', 'HorizontalAlignment', 'left');
 
-clear;
-clc;
+    % Nested functions for button callbacks
+    function browseInput()
+        [file, path] = uigetfile({'*.*', 'All Files'}, 'Select Input File');
+        if isequal(file,0)
+            return;
+        else
+            inputField.Value = fullfile(path, file);
+        end
+    end
+
+    function browseOutput()
+        [file, path] = uiputfile({'*.*', 'All Files'}, 'Select Output File');
+        if isequal(file,0)
+            return;
+        else
+            outputField.Value = fullfile(path, file);
+        end
+    end
+
+    
+    function processedData = processData(data)
+        % Placeholder for your data processing logic
+        processedData = data; % Modify as needed
+    end
+end
+
+function compilable_spike_validator(varargin)
 
 %% Paths - edit this!!!
-edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/'; % Update this path
+% Default paths
+inputPath = '';
+
+% Parse input arguments
+p = inputParser;
+addParameter(p, 'input', '', @ischar);
+parse(p, varargin{:});
+inputPath = p.Results.input;
+% Validate paths
+if isempty(inputPath)
+    error('Input path must be specified.');
+end
+edf_dir = inputPath;
+
+%edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/'; % Update this path
 out_file = 'selections.csv'; % Output CSV file name
 
 %% Overwrite settings - edit this as needed
@@ -77,8 +115,7 @@ for i = 1:length(edf_files)
     
     %% Load and process the EDF file
     [values, chLabels, fs] = read_in_edf_clean(edf_filename); % Ensure this function is available
-    chLabels = clean_temple(chLabels);
-
+    
     % Initialize gain
     gain = 50;
     
@@ -92,10 +129,6 @@ for i = 1:length(edf_files)
     
     % Demean the channels
     values = values - nanmean(values, 1);
-
-    % Make channels with all nans be zero
-    all_nan_chs = all(isnan(values),1);
-    values(:,all_nan_chs) = zeros(size(values,1),sum(all_nan_chs));
     
     % High-pass filter
     values = highpass(values, 1, fs);
@@ -179,17 +212,10 @@ for i = 1:length(edf_files)
     end
     
 end
+end
 
 %% Function Definitions
-function new_labels = clean_temple(chLabels)
-
-new_labels = chLabels;
-new_labels = strrep(new_labels,'EEG','');
-new_labels = strrep(new_labels,'_REF','');
-new_labels = strrep(new_labels,'FP','Fp');
-new_labels = strrep(new_labels,'Z','z');
-
-end
+%function clean_temple
 
 
 function [out, chLabels, fs] = read_in_edf_clean(filepath)

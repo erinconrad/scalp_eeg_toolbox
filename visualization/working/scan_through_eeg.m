@@ -1,124 +1,102 @@
-% clean_spike_validator.m
-%{
-Instructions:
-1. Make sure you have Matlab's Biosignal Processing Toolbox (required for
-builtin functions to load edf files)
-2. Update paths below
-3. Navigate to directory containing this script and type
-   >> clean_spike_validator
 
-The script will loop over all EDF files in a single directory and display
-the EEG in each EDF file. The user will be prompted to select if the spike
-is left (l), right (r), midline (m), or if there is no spike (n). The user
-will then press return/enter to confirm the choice. Selections will be
-saved in a CSV file in the directory containing EDF files.
-
-The montage can be toggled between bipolar (b) and CAR (c).
-
-Pressing the up or down arrow will adjust the gain.
-
-The default overwrite setting (0) is to not re-present any EDF files the
-user has already completed. Changing this to overwrite = 1 will allow the
-user to repeat spike selections for all files.
-%}
 
 clear;
 clc;
 
+%% Parameters
+just_psd = 0;
+psd_ch = 'P3-O1';
+psd_times = [7*15 8*15];
+duration = 15;
+start_time = 0;
+
 %% Paths - edit this!!!
-edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/'; % Update this path
-out_file = 'selections.csv'; % Output CSV file name
+%edf_file = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/temple_test/aaaaacad_s003_t000.edf';
+edf_path = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/temple_test/';
+spec_file = 'aaaaacad_s003_t000.edf';
+edf_file = fullfile(edf_path,[spec_file]);
 
-%% Overwrite settings - edit this as needed
-% overwrite = 0 (default): skip previously completed files
-% overwrite = 1: re-write selections of all files
-% overwrite = 2: show all files, but do not save any selections
-overwrite = 0;
+%% Load and process the EDF file
+[values, chLabels, fs] = read_in_edf_clean(edf_file); % Ensure this function is available
+chLabels = clean_temple(chLabels);
 
-%{ ----- NO NEED TO EDIT BELOW THIS ------------ %}
+% Initialize gain
+gain = 50;
 
-%% Define variable names in table
-variableNames = {'Filename', 'Response'};  % Replace with your desired variable names
-
-%% Load output file if it exists and initialize table
-if overwrite == 0
-    % Load the out file if it exists
-    if exist(fullfile(edf_dir, out_file), "file") ~= 0
-        responses = readtable(fullfile(edf_dir, out_file),...
-            'ReadVariableNames', true, 'HeaderLines', 0);
-    else
-        responses = table('Size', [0, 2], 'VariableTypes', {'string', 'string'}, ...
-                  'VariableNames', variableNames);
+% Interpolate over NaNs
+for j = 1:size(values, 2)
+    nan_indices = isnan(values(:, j));
+    if any(nan_indices)
+        values(nan_indices, j) = nanmean(values(:, j));
     end
-else
-    responses = table('Size', [0, 2], 'VariableTypes', {'string', 'string'}, ...
-                  'VariableNames', variableNames);
 end
 
-% Get the list of EDF files
-edf_files = dir(fullfile(edf_dir, '*.edf'));
+% Demean the channels
+values = values - nanmean(values, 1);
 
-% Loop through each EDF file
-for i = 1:length(edf_files)
-    
-    %% Figure out the file path and whether to run it
-    % Get the full path of the current EDF file
-    edf_filename = fullfile(edf_dir, edf_files(i).name);
-    
-    % Look and see if we've done it already (if not overwriting)
-    if overwrite == 0 || overwrite == 2
-        completed_files = responses.Filename;
-        
-        if any(strcmp(completed_files, edf_files(i).name))
-            fprintf('\nAlready did %s, skipping\n', edf_files(i).name);
-            continue;
-        end
-    end
-    
-    %% Load and process the EDF file
-    [values, chLabels, fs] = read_in_edf_clean(edf_filename); % Ensure this function is available
-    chLabels = clean_temple(chLabels);
+% Make channels with all nans be zero
+all_nan_chs = all(isnan(values),1);
+values(:,all_nan_chs) = zeros(size(values,1),sum(all_nan_chs));
 
-    % Initialize gain
-    gain = 50;
-    
-    % Interpolate over NaNs
-    for j = 1:size(values, 2)
-        nan_indices = isnan(values(:, j));
-        if any(nan_indices)
-            values(nan_indices, j) = nanmean(values(:, j));
-        end
-    end
-    
-    % Demean the channels
-    values = values - nanmean(values, 1);
+% High-pass filter
+%values = highpass(values, 1, fs);
+values = bandstop(values, [58 62], fs);
 
-    % Make channels with all nans be zero
-    all_nan_chs = all(isnan(values),1);
-    values(:,all_nan_chs) = zeros(size(values,1),sum(all_nan_chs));
-    
-    % High-pass filter
-    values = highpass(values, 1, fs);
-    values = bandstop(values, [58 62], fs);
-    
-    % Get bipolar montage
-    [bipolar_values, bipolar_labels] = scalp_bipolar_clean(values, chLabels);
-    
-    % Also get CAR montage
-    [car_values, car_labels] = car_montage_clean(values, chLabels);
-    
-    %% Plotting
-    % Initially set bipolar montage
-    montage_type = 'bipolar';
-    switch montage_type
-        case 'bipolar'
-            plot_values = bipolar_values;
-            plot_labels = bipolar_labels;
-        case 'car'
-            plot_values = car_values;
-            plot_labels = car_labels;
+% Get bipolar montage
+[bipolar_values, bipolar_labels] = scalp_bipolar_clean(values, chLabels);
+
+% Also get CAR montage
+[car_values, car_labels] = car_montage_clean(values, chLabels);
+
+%% Plotting
+% Initially set bipolar montage
+montage_type = 'bipolar';
+switch montage_type
+    case 'bipolar'
+        plot_values = bipolar_values;
+        plot_labels = bipolar_labels;
+    case 'car'
+        plot_values = car_values;
+        plot_labels = car_labels;
+end
+
+if just_psd
+    figure
+    set(gcf,'position',[1 1 1400 500])
+    tiledlayout(2,1)
+
+    psd_idx =  [max([round(psd_times(1)*fs),1]):round(psd_times(2)*fs)];
+    temp_values = bipolar_values(psd_idx,strcmp(bipolar_labels,psd_ch));
+
+    nexttile
+    plot(linspace(0,psd_times(2)-psd_times(1),length(temp_values)),temp_values)
+    hold on
+    for k = 1:15
+        plot([k k],get(gca,'ylim'),'r--')
     end
+    xlabel('seconds')
+    ylabel('uV)')
+    title(sprintf('%s %s',spec_file,psd_ch))
+
+    nexttile
+    x = temp_values;
+    N = length(x);
+    xdft = fft(x);
+    xdft = xdft(1:N/2+1);
+    %psdx = (1/(fs*N)) * abs(xdft).^2;
+    psdx = log(abs(xdft).^2);
+    psdx(2:end-1) = 2*psdx(2:end-1);
+    freq = 0:fs/length(x):fs/2;
+    plot(freq,psdx);
+    xlim([0 70])
+    xlabel('Hz')
+    ylabel('log(uV^2)')
     
+    print(gcf,[edf_path,strrep(spec_file,'.',''),'_',num2str(psd_times(1)),'-',num2str(psd_times(2))],'-dpng')
+
+
+else
+
     % Create a figure for displaying the EEG data
     figure;
     hFig = gcf;
@@ -130,13 +108,11 @@ for i = 1:length(edf_files)
     user_input = '';  % Initialize as empty
     
     % Plot EEG data with prompt and selection texts
-    [prompt_text, selection_text] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, user_input);
+    plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
     
-    fprintf('\nDisplaying %s\n', edf_files(i).name);
+    fprintf('\nDisplaying start time %1.1f s\n', start_time);
     
     %% Store Handles and Data in appdata
-    setappdata(hFig, 'prompt_text', prompt_text);
-    setappdata(hFig, 'selection_text', selection_text);
     setappdata(hFig, 'gain', gain);
     setappdata(hFig, 'bipolar_values', bipolar_values);
     setappdata(hFig, 'bipolar_labels', bipolar_labels);
@@ -144,11 +120,12 @@ for i = 1:length(edf_files)
     setappdata(hFig, 'car_labels', car_labels);
     setappdata(hFig, 'fs', fs);
     setappdata(hFig, 'montage_type', montage_type);
+    setappdata(hFig, 'start_time', start_time);
+    setappdata(hFig, 'duration', duration);
     
     %% Handle User Input
     % Initialize variables and store them in appdata
     arrow_key_input = '';
-    setappdata(hFig, 'user_input', user_input);
     setappdata(hFig, 'arrow_key_input', arrow_key_input);
     
     % Set up the figure to detect key presses using WindowKeyPressFcn
@@ -160,7 +137,6 @@ for i = 1:length(edf_files)
     %% Retrieve User Input and Other Data
     % Retrieve the stored arrow_key_input and user_input from appdata
     arrow_key_input = getappdata(hFig, 'arrow_key_input');
-    user_input = getappdata(hFig, 'user_input');
     gain = getappdata(hFig, 'gain');
     montage_type = getappdata(hFig, 'montage_type');
     
@@ -169,15 +145,7 @@ for i = 1:length(edf_files)
     if ishandle(hFig)
         close(hFig);
     end
-    
-    % Store the filename and response in the responses array
-    responses(end+1, :) = {edf_files(i).name, user_input};
-    
-    if overwrite ~= 2
-        % Save the table as a CSV file (save as you go)
-        writetable(responses, fullfile(edf_dir, out_file));
-    end
-    
+
 end
 
 %% Function Definitions
@@ -220,34 +188,13 @@ chLabels = cellstr(chs);
 
 end
 
-function [prompt_text, selection_text] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, user_input)
-    % This function plots the EEG data and adds prompt and selection texts
-    plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain);
-    
-    % Add prompt text as super title
-    prompt_str = 'Select spike: l (left), r (right), m (midline), n (no spike)';
-    sgtitle(prompt_str, 'FontSize', 16, 'Color', 'blue');
-    
-    % Add selection display text at a fixed position (e.g., top-left corner)
-    if isempty(user_input)
-        selection_str = 'Selected: None';
-    else
-        selection_str = ['Selected: ', user_input];
-    end
-    % Use normalized units to position the text relative to the axes
-    selection_text = text(0.05, 0.95, selection_str, 'Units', 'normalized', ...
-        'FontSize', 16, 'Interpreter', 'none', 'Color', 'red', 'HorizontalAlignment', 'left');
-    
-    % Since sgtitle does not return a handle, set prompt_text to empty
-    prompt_text = [];
-end
+
 
 function keyPressHandler(hObject, event)
     % Nested key press handler function
 
     % Retrieve data stored in appdata
     arrow_key_input = getappdata(hObject, 'arrow_key_input');
-    user_input = getappdata(hObject, 'user_input');
     gain = getappdata(hObject, 'gain');
     bipolar_values = getappdata(hObject, 'bipolar_values');
     bipolar_labels = getappdata(hObject, 'bipolar_labels');
@@ -255,7 +202,8 @@ function keyPressHandler(hObject, event)
     car_labels = getappdata(hObject, 'car_labels');
     fs = getappdata(hObject, 'fs');
     montage_type = getappdata(hObject, 'montage_type');
-    selection_text = getappdata(hObject, 'selection_text');  % Retrieve selection text handle
+    start_time = getappdata(hObject, 'start_time');
+    duration = getappdata(hObject, 'duration');
 
     % Handle key presses
     if strcmp(event.Key, 'uparrow')
@@ -273,14 +221,9 @@ function keyPressHandler(hObject, event)
                 plot_values = car_values;
                 plot_labels = car_labels;
         end
-        % Retrieve current user_input for displaying
-        current_input = getappdata(hObject, 'user_input');
-        % Re-plot EEG with updated gain and existing user_input
-        [~, selection_text_new] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, current_input);
 
-        % Update appdata with new text handles
-        setappdata(hObject, 'prompt_text', []); % sgtitle doesn't return a handle
-        setappdata(hObject, 'selection_text', selection_text_new);
+        % Re-plot EEG with updated gain and existing user_input
+        plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
 
     elseif strcmp(event.Key, 'downarrow')
         disp('Down arrow pressed');
@@ -297,14 +240,45 @@ function keyPressHandler(hObject, event)
                 plot_values = car_values;
                 plot_labels = car_labels;
         end
-        % Retrieve current user_input for displaying
-        current_input = getappdata(hObject, 'user_input');
         % Re-plot EEG with updated gain and existing user_input
-        [~, selection_text_new] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, current_input);
+        plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
 
-        % Update appdata with new text handles
-        setappdata(hObject, 'prompt_text', []); % sgtitle doesn't return a handle
-        setappdata(hObject, 'selection_text', selection_text_new);
+     
+    elseif strcmp(event.Key, 'leftarrow')
+        disp('Left arrow pressed')
+        arrow_key_input = 'left';
+        start_time = max([start_time - duration,0]);
+        setappdata(hObject,'start_time',start_time);
+        hold off;
+        switch montage_type
+            case 'bipolar'
+                plot_values = bipolar_values;
+                plot_labels = bipolar_labels;
+            case 'car'
+                plot_values = car_values;
+                plot_labels = car_labels;
+        end
+
+        % Re-plot EEG with updated gain and existing user_input
+        plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
+
+    elseif strcmp(event.Key, 'rightarrow')
+        disp('Right arrow pressed')
+        arrow_key_input = 'right';
+        start_time = min([start_time + duration,size(bipolar_values,1)/fs]);
+        setappdata(hObject,'start_time',start_time);
+        hold off;
+        switch montage_type
+            case 'bipolar'
+                plot_values = bipolar_values;
+                plot_labels = bipolar_labels;
+            case 'car'
+                plot_values = car_values;
+                plot_labels = car_labels;
+        end
+
+        % Re-plot EEG with updated gain and existing user_input
+        plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
 
     elseif strcmp(event.Key, 'b') || strcmp(event.Key, 'c')
         disp(['Montage change requested: ', event.Key]);
@@ -324,35 +298,10 @@ function keyPressHandler(hObject, event)
                 plot_values = car_values;
                 plot_labels = car_labels;
         end
-        % Retrieve current user_input for displaying
-        current_input = getappdata(hObject, 'user_input');
-        % Re-plot EEG with updated montage and existing user_input
-        [~, selection_text_new] = plot_eeg_with_text(plot_values, fs, plot_labels, gain, current_input);
+        plot_scalp_eeg_clean(plot_values, fs, plot_labels, gain, start_time,duration);
 
-        % Update appdata with new text handles
-        setappdata(hObject, 'prompt_text', []); % sgtitle doesn't return a handle
-        setappdata(hObject, 'selection_text', selection_text_new);
-
-    elseif strcmp(event.Key, 'return')
-        % User pressed Enter to confirm input
-        if ismember(user_input, {'l', 'n', 'r', 'm'})
-            disp(['User input confirmed: ', user_input]);
-            % Store the user input
-            setappdata(hObject, 'user_input', user_input);
-            % Resume execution (but do NOT close the figure here)
-            uiresume(hObject);
-        else
-            disp('Please press "l" (left), "r" (right), "m" (midline), or "n" (no spike) before pressing Enter to confirm.');
-        end
-    elseif ismember(event.Key, {'l', 'n', 'r', 'm'})
-        % Store the user's input character but wait for Enter to confirm
-        user_input = event.Key;
-        disp(['You pressed "', user_input, '". Press Enter to confirm.']);
-        % Store the tentative user input
-        setappdata(hObject, 'user_input', user_input);
-        
-        % Update the selection display on the plot (Modified)
-        set(selection_text, 'String', ['Selected: ', user_input]);
+      
+    
     else
         disp(['Other key pressed: ', event.Key]);
     end
@@ -477,13 +426,18 @@ function [car_values, car_labels] = car_montage_clean(values, chLabels)
     end
 end
 
-function plot_scalp_eeg_clean(values, fs, labels, gain)
+function plot_scalp_eeg_clean(values, fs, labels, gain,start_time,duration)
     % This function plots the EEG data in a scalp montage
     
     added_offset = gain;
     
-    dur = size(values,1)/fs;
+    dur = duration;
     nchs = length(labels);
+
+    % restrict values
+    start_idx = max([1,round(start_time*fs)]);
+    end_idx = min([size(values,1),round((start_time+dur)*fs)]);
+    values = values(start_idx:end_idx,:);
     
     offset = 0;
     

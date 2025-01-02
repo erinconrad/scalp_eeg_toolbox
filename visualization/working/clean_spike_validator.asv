@@ -26,7 +26,8 @@ clear;
 clc;
 
 %% Paths - edit this!!!
-edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/'; % Update this path
+edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/temple_test/';
+%edf_dir = '/Users/erinconrad/Desktop/research/scalp_eeg_toolbox/results/example_edfs/'; % Update this path
 out_file = 'selections.csv'; % Output CSV file name
 
 %% Overwrite settings - edit this as needed
@@ -77,8 +78,7 @@ for i = 1:length(edf_files)
     
     %% Load and process the EDF file
     [values, chLabels, fs] = read_in_edf_clean(edf_filename); % Ensure this function is available
-    chLabels = clean_temple(chLabels);
-
+    
     % Initialize gain
     gain = 50;
     
@@ -92,10 +92,6 @@ for i = 1:length(edf_files)
     
     % Demean the channels
     values = values - nanmean(values, 1);
-
-    % Make channels with all nans be zero
-    all_nan_chs = all(isnan(values),1);
-    values(:,all_nan_chs) = zeros(size(values,1),sum(all_nan_chs));
     
     % High-pass filter
     values = highpass(values, 1, fs);
@@ -181,13 +177,8 @@ for i = 1:length(edf_files)
 end
 
 %% Function Definitions
-function new_labels = clean_temple(chLabels)
+function clean_temple(chLabels)
 
-new_labels = chLabels;
-new_labels = strrep(new_labels,'EEG','');
-new_labels = strrep(new_labels,'_REF','');
-new_labels = strrep(new_labels,'FP','Fp');
-new_labels = strrep(new_labels,'Z','z');
 
 end
 
